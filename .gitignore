@@ -1,0 +1,15 @@
+# Ignorer les datasets
+data/
+mlruns/
+
+# Ignorer l'environnement virtuel
+venv/
+
+# Ignorer les fichiers temporaires
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+
+# Résultats de prédiction
+resultats_application_test.csv
