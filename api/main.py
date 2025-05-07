@@ -178,3 +178,7 @@ async def upload_files(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+        
+@app.get("/")
+def home():
+    return {"message": "API de scoring crédit opérationnelle 🚀 - accédez à /docs pour voir les endpoints."}
