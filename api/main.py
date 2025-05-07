@@ -7,6 +7,7 @@ from io import BytesIO
 import joblib
 import pickle
 import shap
+import os
 
 from src.preprocessing import (
     imputer_valeurs_manquantes,
@@ -122,28 +123,26 @@ async def upload_files(
         df = fusionner_et_agreger_donnees(df_app, df_bureau, df_prev)
         df.fillna(0, inplace=True)
 
-        # Nettoyage colonnes
         df.columns = df.columns.str.strip().str.replace('[^A-Za-z0-9_]+', '_', regex=True)
-
-        # Encodage
         cat_cols = df.select_dtypes(include='object').columns
         df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
 
-        # Chargement du modèle
-        with open("models/best_model_lightgbm.pkl", "rb") as f:
+        # === Chargement des modèles ===
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
+
+        with open(os.path.join(base_dir, "best_model_lightgbm.pkl"), "rb") as f:
             model = pickle.load(f)
 
-        colonnes_utiles = joblib.load("models/columns_used.pkl")
-        colonnes_types = joblib.load("models/columns_dtypes.pkl")
+        colonnes_utiles = joblib.load(os.path.join(base_dir, "columns_used.pkl"))
+        colonnes_types = joblib.load(os.path.join(base_dir, "columns_dtypes.pkl"))
 
-        # Features et IDs
+        # Prédiction
         ids_clients = df["SK_ID_CURR"]
         X = df.drop(columns=["SK_ID_CURR"]).reindex(columns=colonnes_utiles, fill_value=0)
         for col, dtype in colonnes_types.items():
             if col in X.columns:
                 X[col] = X[col].astype(dtype)
 
-        # Prédiction
         probas = model.predict_proba(X)[:, 1]
         seuil = 0.14
         y_pred = (probas >= seuil).astype(int)
@@ -154,18 +153,15 @@ async def upload_files(
             "Decision": y_pred
         })
 
-        # SHAP
         explainer = shap.TreeExplainer(model)
         shap_vals = explainer.shap_values(X)
 
-        # SHAP global
         shap_global = np.abs(shap_vals[1]).mean(axis=0)
         shap_global_df = pd.DataFrame({
             "Feature": X.columns,
             "Importance": shap_global
         }).sort_values(by="Importance", ascending=False).head(20)
 
-        # SHAP local
         if sk_id_curr not in ids_clients.values:
             raise HTTPException(status_code=404, detail=f"SK_ID_CURR {sk_id_curr} introuvable.")
 
