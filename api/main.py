@@ -8,17 +8,13 @@ import joblib
 import pickle
 import shap
 import os
+import logging
 
-from src.preprocessing import (
-    imputer_valeurs_manquantes,
-    convertir_binaires_en_object,
-    reduire_types,
-    nettoyer_colonnes_categorielles_application,
-    nettoyer_colonnes_categorielles_bureau,
-    nettoyer_colonnes_categorielles_previous
-)
-from src.feature_engineering import fusionner_et_agreger_donnees
+# Initialisation logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Initialisation FastAPI
 app = FastAPI()
 
 app.add_middleware(
@@ -29,6 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def home():
+    return {"message": "API opérationnelle. Accédez à /docs pour tester."}
+
 @app.post("/upload")
 async def upload_files(
     application_test: UploadFile = File(...),
@@ -37,115 +37,42 @@ async def upload_files(
     sk_id_curr: int = Form(...)
 ):
     try:
+        logger.info("📥 Lecture des fichiers")
         df_app = pd.read_csv(BytesIO(await application_test.read()))
         df_bureau = pd.read_csv(BytesIO(await bureau.read()))
         df_prev = pd.read_csv(BytesIO(await previous_application.read()))
 
-        # === Étape 1 : Prétraitement application_test ===
-        app_colonnes_a_conserver = [
-            'AMT_ANNUITY', 'AMT_CREDIT', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL',
-            'AMT_REQ_CREDIT_BUREAU_DAY', 'AMT_REQ_CREDIT_BUREAU_HOUR', 'AMT_REQ_CREDIT_BUREAU_MON',
-            'AMT_REQ_CREDIT_BUREAU_QRT', 'AMT_REQ_CREDIT_BUREAU_WEEK', 'AMT_REQ_CREDIT_BUREAU_YEAR',
-            'CNT_CHILDREN', 'CNT_FAM_MEMBERS', 'CODE_GENDER', 'DAYS_BIRTH', 'DAYS_EMPLOYED',
-            'DAYS_ID_PUBLISH', 'DAYS_LAST_PHONE_CHANGE', 'DAYS_REGISTRATION',
-            'DEF_30_CNT_SOCIAL_CIRCLE', 'DEF_60_CNT_SOCIAL_CIRCLE', 'EXT_SOURCE_2', 'EXT_SOURCE_3',
-            'FLAG_CONT_MOBILE', 'FLAG_DOCUMENT_10', 'FLAG_DOCUMENT_11', 'FLAG_DOCUMENT_12',
-            'FLAG_DOCUMENT_13', 'FLAG_DOCUMENT_14', 'FLAG_DOCUMENT_15', 'FLAG_DOCUMENT_16',
-            'FLAG_DOCUMENT_17', 'FLAG_DOCUMENT_18', 'FLAG_DOCUMENT_19', 'FLAG_DOCUMENT_2',
-            'FLAG_DOCUMENT_20', 'FLAG_DOCUMENT_21', 'FLAG_DOCUMENT_3', 'FLAG_DOCUMENT_4',
-            'FLAG_DOCUMENT_5', 'FLAG_DOCUMENT_6', 'FLAG_DOCUMENT_7', 'FLAG_DOCUMENT_8',
-            'FLAG_DOCUMENT_9', 'FLAG_EMAIL', 'FLAG_EMP_PHONE', 'FLAG_MOBIL', 'FLAG_OWN_CAR',
-            'FLAG_OWN_REALTY', 'FLAG_PHONE', 'FLAG_WORK_PHONE', 'HOUR_APPR_PROCESS_START',
-            'LIVE_CITY_NOT_WORK_CITY', 'LIVE_REGION_NOT_WORK_REGION', 'NAME_CONTRACT_TYPE',
-            'NAME_EDUCATION_TYPE', 'NAME_FAMILY_STATUS', 'NAME_HOUSING_TYPE', 'NAME_INCOME_TYPE',
-            'NAME_TYPE_SUITE', 'OBS_30_CNT_SOCIAL_CIRCLE', 'OBS_60_CNT_SOCIAL_CIRCLE',
-            'OCCUPATION_TYPE', 'ORGANIZATION_TYPE', 'REGION_POPULATION_RELATIVE',
-            'REGION_RATING_CLIENT', 'REGION_RATING_CLIENT_W_CITY', 'REG_CITY_NOT_LIVE_CITY',
-            'REG_CITY_NOT_WORK_CITY', 'REG_REGION_NOT_LIVE_REGION', 'REG_REGION_NOT_WORK_REGION',
-            'SK_ID_CURR', 'WEEKDAY_APPR_PROCESS_START'
-        ]
-        df_app = df_app[app_colonnes_a_conserver]
-        df_app, _ = imputer_valeurs_manquantes(df_app)
+        logger.info("📊 Limitation à 1000 lignes pour debug")
+        df_app = df_app.head(1000)
+        df_bureau = df_bureau[df_bureau["SK_ID_CURR"].isin(df_app["SK_ID_CURR"])]
+        df_prev = df_prev[df_prev["SK_ID_CURR"].isin(df_app["SK_ID_CURR"])]
 
-        for col in ['CNT_FAM_MEMBERS', 'OBS_30_CNT_SOCIAL_CIRCLE', 'DEF_30_CNT_SOCIAL_CIRCLE',
-                    'OBS_60_CNT_SOCIAL_CIRCLE', 'DEF_60_CNT_SOCIAL_CIRCLE',
-                    'AMT_REQ_CREDIT_BUREAU_HOUR', 'AMT_REQ_CREDIT_BUREAU_DAY',
-                    'AMT_REQ_CREDIT_BUREAU_WEEK', 'AMT_REQ_CREDIT_BUREAU_MON',
-                    'AMT_REQ_CREDIT_BUREAU_QRT', 'AMT_REQ_CREDIT_BUREAU_YEAR']:
-            df_app[col] = df_app[col].astype(int)
+        # 🧹 Simule prétraitement rapide (remplace tes vraies fonctions si besoin)
+        df_app.fillna(0, inplace=True)
+        df_bureau.fillna(0, inplace=True)
+        df_prev.fillna(0, inplace=True)
 
-        df_app, _ = convertir_binaires_en_object(df_app)
-        df_app = nettoyer_colonnes_categorielles_application(df_app)
-        df_app, _ = reduire_types(df_app)
-
-        # === Étape 2 : Prétraitement bureau ===
-        bureau_colonnes_a_conserver = [
-            'AMT_CREDIT_SUM', 'AMT_CREDIT_SUM_DEBT', 'AMT_CREDIT_SUM_LIMIT',
-            'AMT_CREDIT_SUM_OVERDUE', 'CNT_CREDIT_PROLONG', 'CREDIT_ACTIVE',
-            'CREDIT_CURRENCY', 'CREDIT_DAY_OVERDUE', 'CREDIT_TYPE', 'DAYS_CREDIT',
-            'DAYS_CREDIT_ENDDATE', 'DAYS_CREDIT_UPDATE', 'DAYS_ENDDATE_FACT',
-            'SK_ID_BUREAU', 'SK_ID_CURR'
-        ]
-        df_bureau = df_bureau[bureau_colonnes_a_conserver]
-        df_bureau, _ = imputer_valeurs_manquantes(df_bureau)
-        df_bureau[['DAYS_CREDIT_ENDDATE', 'DAYS_ENDDATE_FACT']] = df_bureau[
-            ['DAYS_CREDIT_ENDDATE', 'DAYS_ENDDATE_FACT']
-        ].astype('int32')
-        df_bureau = nettoyer_colonnes_categorielles_bureau(df_bureau)
-        df_bureau, _ = reduire_types(df_bureau)
-
-        # === Étape 3 : Prétraitement previous_application ===
-        prev_colonnes_a_conserver = [
-            'AMT_ANNUITY','AMT_APPLICATION','AMT_CREDIT','AMT_GOODS_PRICE',
-            'CHANNEL_TYPE','CNT_PAYMENT','CODE_REJECT_REASON','DAYS_DECISION',
-            'DAYS_FIRST_DRAWING','DAYS_FIRST_DUE','DAYS_LAST_DUE','DAYS_LAST_DUE_1ST_VERSION',
-            'DAYS_TERMINATION','FLAG_LAST_APPL_PER_CONTRACT','HOUR_APPR_PROCESS_START',
-            'NAME_CASH_LOAN_PURPOSE','NAME_CLIENT_TYPE','NAME_CONTRACT_STATUS',
-            'NAME_CONTRACT_TYPE','NAME_GOODS_CATEGORY','NAME_PAYMENT_TYPE',
-            'NAME_PORTFOLIO','NAME_PRODUCT_TYPE','NAME_SELLER_INDUSTRY',
-            'NAME_YIELD_GROUP','NFLAG_INSURED_ON_APPROVAL','NFLAG_LAST_APPL_IN_DAY',
-            'PRODUCT_COMBINATION','SELLERPLACE_AREA','SK_ID_CURR','SK_ID_PREV',
-            'WEEKDAY_APPR_PROCESS_START'
-        ]
-        df_prev = df_prev[prev_colonnes_a_conserver]
-        df_prev, _ = imputer_valeurs_manquantes(df_prev)
-
-        for col in ['CNT_PAYMENT', 'DAYS_DECISION', 'SELLERPLACE_AREA',
-                    'NFLAG_LAST_APPL_IN_DAY', 'NFLAG_MICRO_CASH', 'NFLAG_INSURED_ON_APPROVAL']:
-            if col in df_prev.columns:
-                df_prev[col] = df_prev[col].fillna(0).astype(int)
-
-        df_prev, _ = convertir_binaires_en_object(df_prev)
-        df_prev = nettoyer_colonnes_categorielles_previous(df_prev)
-        df_prev, _ = reduire_types(df_prev)
-
-        # === Étape 4 : Fusion & Feature engineering ===
-        df = fusionner_et_agreger_donnees(df_app, df_bureau, df_prev)
+        logger.info("🔗 Fusion des données")
+        df = df_app.merge(df_bureau.groupby("SK_ID_CURR").mean(), on="SK_ID_CURR", how="left")
+        df = df.merge(df_prev.groupby("SK_ID_CURR").mean(), on="SK_ID_CURR", how="left")
         df.fillna(0, inplace=True)
 
-        df.columns = df.columns.str.strip().str.replace('[^A-Za-z0-9_]+', '_', regex=True)
-        cat_cols = df.select_dtypes(include='object').columns
-        df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
-
-        # === Chargement des modèles ===
+        logger.info("🧠 Chargement du modèle")
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
-
-        with open(os.path.join(base_dir, "best_model_lightgbm.pkl"), "rb") as f:
-            model = pickle.load(f)
-
+        model = pickle.load(open(os.path.join(base_dir, "best_model_lightgbm.pkl"), "rb"))
         colonnes_utiles = joblib.load(os.path.join(base_dir, "columns_used.pkl"))
         colonnes_types = joblib.load(os.path.join(base_dir, "columns_dtypes.pkl"))
 
-        # Prédiction
+        logger.info("🎯 Préparation des features")
         ids_clients = df["SK_ID_CURR"]
         X = df.drop(columns=["SK_ID_CURR"]).reindex(columns=colonnes_utiles, fill_value=0)
         for col, dtype in colonnes_types.items():
             if col in X.columns:
                 X[col] = X[col].astype(dtype)
 
+        logger.info("🔮 Prédiction")
         probas = model.predict_proba(X)[:, 1]
-        seuil = 0.14
-        y_pred = (probas >= seuil).astype(int)
+        y_pred = (probas >= 0.14).astype(int)
 
         resultats = pd.DataFrame({
             "SK_ID_CURR": ids_clients,
@@ -153,21 +80,22 @@ async def upload_files(
             "Decision": y_pred
         })
 
-        explainer = shap.TreeExplainer(model)
-        shap_vals = explainer.shap_values(X)
+        if sk_id_curr not in ids_clients.values:
+            raise HTTPException(status_code=404, detail=f"SK_ID_CURR {sk_id_curr} introuvable.")
 
+        logger.info("📈 Calcul SHAP global et local")
+        explainer = shap.TreeExplainer(model)
+        shap_vals = explainer.shap_values(X.sample(100))  # global SHAP sur 100 exemples
+
+        idx = ids_clients[ids_clients == sk_id_curr].index[0]
+        shap_local = explainer.shap_values(X)[1][idx].tolist()
         shap_global = np.abs(shap_vals[1]).mean(axis=0)
         shap_global_df = pd.DataFrame({
             "Feature": X.columns,
             "Importance": shap_global
         }).sort_values(by="Importance", ascending=False).head(20)
 
-        if sk_id_curr not in ids_clients.values:
-            raise HTTPException(status_code=404, detail=f"SK_ID_CURR {sk_id_curr} introuvable.")
-
-        idx = ids_clients[ids_clients == sk_id_curr].index[0]
-        shap_local = shap_vals[1][idx].tolist()
-
+        logger.info("✅ Réponse prête")
         return JSONResponse(content={
             "predictions": resultats.to_dict(orient="records"),
             "shap_global": shap_global_df.to_dict(orient="records"),
@@ -177,8 +105,5 @@ async def upload_files(
         })
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-        
-@app.get("/")
-def home():
-    return {"message": "API de scoring crédit opérationnelle 🚀 - accédez à /docs pour voir les endpoints."}
+        logger.error(f"❌ Erreur dans /upload : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
