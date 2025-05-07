@@ -1,12 +1,10 @@
-# %%
+
 import pandas as pd
 import numpy as np
 import pickle
+import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-
-
-# %%
 from src.preprocessing import (
     load_all_data,
     explorer_colonnes_interactives,
@@ -27,16 +25,12 @@ from src.preprocessing import (
 from src.feature_engineering import fusionner_et_agreger_donnees
 from src.feature_engineering import feature_engineering_bureau, feature_engineering_previous
 
-# %%
 # Chargement des dataset
 data_path = r"C:\Users\inesn\OneDrive - Université de Paris\credit_score_projet7\data\original"
 data = load_all_data(data_path)
 
-# %%
 app_test = data['application_test']
-
-# %%
-colonnes_a_conserver = [
+app_colonnes_a_conserver = [
     'AMT_ANNUITY', 'AMT_CREDIT', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL',
     'AMT_REQ_CREDIT_BUREAU_DAY', 'AMT_REQ_CREDIT_BUREAU_HOUR',
     'AMT_REQ_CREDIT_BUREAU_MON', 'AMT_REQ_CREDIT_BUREAU_QRT',
@@ -65,15 +59,9 @@ colonnes_a_conserver = [
     'SK_ID_CURR', 'WEEKDAY_APPR_PROCESS_START'
 ]
 
-app_test = app_test[colonnes_a_conserver]
-
-# %%
-# Imputation des valeurs manquantes
+app_test = app_test[app_colonnes_a_conserver]
 app_test, app_test_imputations = imputer_valeurs_manquantes(app_test)
-
-# %%
-# On convertit certaines colonnes en int car c'est plus pertinent
-colonnes_a_convertir_en_int = [
+app_colonnes_a_convertir_en_int = [
     'CNT_FAM_MEMBERS',
     'OBS_30_CNT_SOCIAL_CIRCLE',
     'DEF_30_CNT_SOCIAL_CIRCLE',
@@ -87,83 +75,92 @@ colonnes_a_convertir_en_int = [
     'AMT_REQ_CREDIT_BUREAU_YEAR'
 ]
 
-for col in colonnes_a_convertir_en_int:
+for col in app_colonnes_a_convertir_en_int:
     app_test[col] = app_test[col].astype(int)
 
 
-# %%
-# On convertit certaines colonnnes en object car c'est plus pertinent, notamment les flags
 app_test, app_test_colonnes_binaires = convertir_binaires_en_object(app_test)
-
-# %%
 app_test = nettoyer_colonnes_categorielles_application(app_test)
-
-# %%
-# On reduit le type des données pour alléger la mémoire
 app_test, app_test_conversions = reduire_types(app_test)
 
-# %%
 bureau = data['bureau']
 
-# %%
-bureau, bureau_colonnes_supprimees = supprimer_colonnes_trop_vides(bureau, seuil=40)
+bureau_colonnes_a_conserver = ['AMT_CREDIT_SUM',
+ 'AMT_CREDIT_SUM_DEBT',
+ 'AMT_CREDIT_SUM_LIMIT',
+ 'AMT_CREDIT_SUM_OVERDUE',
+ 'CNT_CREDIT_PROLONG',
+ 'CREDIT_ACTIVE',
+ 'CREDIT_CURRENCY',
+ 'CREDIT_DAY_OVERDUE',
+ 'CREDIT_TYPE',
+ 'DAYS_CREDIT',
+ 'DAYS_CREDIT_ENDDATE',
+ 'DAYS_CREDIT_UPDATE',
+ 'DAYS_ENDDATE_FACT',
+ 'SK_ID_BUREAU',
+ 'SK_ID_CURR']
 
-# %%
-bureau, bureau_lignes_supprimees = supprimer_lignes_trop_vides(bureau, seuil=40)
-
-# %%
+bureau = bureau[bureau_colonnes_a_conserver]
 bureau, bureau_imputations = imputer_valeurs_manquantes(bureau)
-
-# %%
 bureau[['DAYS_CREDIT_ENDDATE', 'DAYS_ENDDATE_FACT']] = bureau[['DAYS_CREDIT_ENDDATE', 'DAYS_ENDDATE_FACT']].astype('int32')
-
-# %%
 bureau = nettoyer_colonnes_categorielles_bureau(bureau)
-
-# %%
 bureau, bureau_conversions = reduire_types(bureau)
 
-# %%
 previous_application = data['previous_application']
 
-# %%
-previous_application, previous_application_colonnes_supprimees = supprimer_colonnes_trop_vides(previous_application, seuil=45)
+prev_colonnes_a_conserver = ['AMT_ANNUITY',
+ 'AMT_APPLICATION',
+ 'AMT_CREDIT',
+ 'AMT_GOODS_PRICE',
+ 'CHANNEL_TYPE',
+ 'CNT_PAYMENT',
+ 'CODE_REJECT_REASON',
+ 'DAYS_DECISION',
+ 'DAYS_FIRST_DRAWING',
+ 'DAYS_FIRST_DUE',
+ 'DAYS_LAST_DUE',
+ 'DAYS_LAST_DUE_1ST_VERSION',
+ 'DAYS_TERMINATION',
+ 'FLAG_LAST_APPL_PER_CONTRACT',
+ 'HOUR_APPR_PROCESS_START',
+ 'NAME_CASH_LOAN_PURPOSE',
+ 'NAME_CLIENT_TYPE',
+ 'NAME_CONTRACT_STATUS',
+ 'NAME_CONTRACT_TYPE',
+ 'NAME_GOODS_CATEGORY',
+ 'NAME_PAYMENT_TYPE',
+ 'NAME_PORTFOLIO',
+ 'NAME_PRODUCT_TYPE',
+ 'NAME_SELLER_INDUSTRY',
+ 'NAME_YIELD_GROUP',
+ 'NFLAG_INSURED_ON_APPROVAL',
+ 'NFLAG_LAST_APPL_IN_DAY',
+ 'PRODUCT_COMBINATION',
+ 'SELLERPLACE_AREA',
+ 'SK_ID_CURR',
+ 'SK_ID_PREV',
+ 'WEEKDAY_APPR_PROCESS_START']
 
-# %%
-previous_application, previous_application_lignes_supprimees = supprimer_lignes_trop_vides(previous_application, seuil=40)
-
-# %%
+previous_application = previous_application[prev_colonnes_a_conserver]
 previous_application, previous_application_imputations = imputer_valeurs_manquantes(previous_application)
-
-# %%
-colonnes_a_convertir_int = [
+prev_colonnes_a_convertir_int = [
     'CNT_PAYMENT', 'DAYS_DECISION', 'SELLERPLACE_AREA',
     'NFLAG_LAST_APPL_IN_DAY', 'NFLAG_MICRO_CASH', 'NFLAG_INSURED_ON_APPROVAL'
 ]
 
-for col in colonnes_a_convertir_int:
+for col in prev_colonnes_a_convertir_int:
     if col in previous_application.columns:
         previous_application[col] = previous_application[col].fillna(0).astype(int)
 
-
-# %%
 previous_application, previous_application_colonnes_binaires = convertir_binaires_en_object(previous_application)
-
-# %%
 previous_application = nettoyer_colonnes_categorielles_previous(previous_application)
-
-# %%
 previous_application, previous_application_conversions = reduire_types(previous_application)
 
-# %%
 # Fusion et feature engineering
 df = fusionner_et_agreger_donnees(app_test, bureau, previous_application)
-
-# %%
 # Remplissage des NaN par 0
 df.fillna(0, inplace=True)
-
-# %%
 # Nettoyage des noms de colonnes : remplacer les caractères spéciaux et espaces
 df.columns = (
     df.columns.str.strip()
@@ -175,10 +172,6 @@ df.columns = (
 cat_cols = df.select_dtypes(include='object').columns
 df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
 
-# %%
-import joblib
-
-# %%
 # Chargement du modèle entraîné (déjà optimisé + seuil choisi)
 with open("models/best_model_lightgbm.pkl", "rb") as f:
     best_model = pickle.load(f)

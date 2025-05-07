@@ -1,132 +1,184 @@
-# credit_scoring_api.py
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import pandas as pd
-import joblib
 import numpy as np
-import uvicorn
-import shap
-import pickle
-
 from io import BytesIO
+import joblib
+import pickle
+import shap
+
 from src.preprocessing import (
     imputer_valeurs_manquantes,
     convertir_binaires_en_object,
     reduire_types,
     nettoyer_colonnes_categorielles_application,
     nettoyer_colonnes_categorielles_bureau,
-    nettoyer_colonnes_categorielles_previous,
+    nettoyer_colonnes_categorielles_previous
 )
 from src.feature_engineering import fusionner_et_agreger_donnees
 
 app = FastAPI()
 
-# Chargement des objets en mémoire
-model = pickle.load(open("models/best_model_lightgbm.pkl", "rb"))
-colonnes_utiles = joblib.load("models/columns_used.pkl")
-dtypes_dict = joblib.load("models/columns_dtypes.pkl")
-seuil_optimal = 0.14
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.post("/predict")
-async def predict(application_test: UploadFile = File(...),
-                  bureau: UploadFile = File(...),
-                  previous_application: UploadFile = File(...),
-                  sk_id: int = None):
+@app.post("/upload")
+async def upload_files(
+    application_test: UploadFile = File(...),
+    bureau: UploadFile = File(...),
+    previous_application: UploadFile = File(...),
+    sk_id_curr: int = Form(...)
+):
     try:
-        # Chargement des fichiers CSV
-        app_test = pd.read_csv(BytesIO(await application_test.read()))
-        bureau_df = pd.read_csv(BytesIO(await bureau.read()))
-        previous_df = pd.read_csv(BytesIO(await previous_application.read()))
+        df_app = pd.read_csv(BytesIO(await application_test.read()))
+        df_bureau = pd.read_csv(BytesIO(await bureau.read()))
+        df_prev = pd.read_csv(BytesIO(await previous_application.read()))
 
-        # Colonnes à conserver dans app_test
-        colonnes_a_conserver = [
+        # === Étape 1 : Prétraitement application_test ===
+        app_colonnes_a_conserver = [
             'AMT_ANNUITY', 'AMT_CREDIT', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL',
-            'AMT_REQ_CREDIT_BUREAU_DAY', 'AMT_REQ_CREDIT_BUREAU_HOUR',
-            'AMT_REQ_CREDIT_BUREAU_MON', 'AMT_REQ_CREDIT_BUREAU_QRT',
-            'AMT_REQ_CREDIT_BUREAU_WEEK', 'AMT_REQ_CREDIT_BUREAU_YEAR',
-            'CNT_CHILDREN', 'CNT_FAM_MEMBERS', 'CODE_GENDER', 'DAYS_BIRTH',
-            'DAYS_EMPLOYED', 'DAYS_ID_PUBLISH', 'DAYS_LAST_PHONE_CHANGE',
-            'DAYS_REGISTRATION', 'DEF_30_CNT_SOCIAL_CIRCLE',
-            'DEF_60_CNT_SOCIAL_CIRCLE', 'EXT_SOURCE_2', 'EXT_SOURCE_3',
-            'FLAG_CONT_MOBILE', 'FLAG_DOCUMENT_10', 'FLAG_DOCUMENT_11',
-            'FLAG_DOCUMENT_12', 'FLAG_DOCUMENT_13', 'FLAG_DOCUMENT_14',
-            'FLAG_DOCUMENT_15', 'FLAG_DOCUMENT_16', 'FLAG_DOCUMENT_17',
-            'FLAG_DOCUMENT_18', 'FLAG_DOCUMENT_19', 'FLAG_DOCUMENT_2',
-            'FLAG_DOCUMENT_20', 'FLAG_DOCUMENT_21', 'FLAG_DOCUMENT_3',
-            'FLAG_DOCUMENT_4', 'FLAG_DOCUMENT_5', 'FLAG_DOCUMENT_6',
-            'FLAG_DOCUMENT_7', 'FLAG_DOCUMENT_8', 'FLAG_DOCUMENT_9', 'FLAG_EMAIL',
-            'FLAG_EMP_PHONE', 'FLAG_MOBIL', 'FLAG_OWN_CAR', 'FLAG_OWN_REALTY',
-            'FLAG_PHONE', 'FLAG_WORK_PHONE', 'HOUR_APPR_PROCESS_START',
-            'LIVE_CITY_NOT_WORK_CITY', 'LIVE_REGION_NOT_WORK_REGION',
-            'NAME_CONTRACT_TYPE', 'NAME_EDUCATION_TYPE', 'NAME_FAMILY_STATUS',
-            'NAME_HOUSING_TYPE', 'NAME_INCOME_TYPE', 'NAME_TYPE_SUITE',
-            'OBS_30_CNT_SOCIAL_CIRCLE', 'OBS_60_CNT_SOCIAL_CIRCLE',
+            'AMT_REQ_CREDIT_BUREAU_DAY', 'AMT_REQ_CREDIT_BUREAU_HOUR', 'AMT_REQ_CREDIT_BUREAU_MON',
+            'AMT_REQ_CREDIT_BUREAU_QRT', 'AMT_REQ_CREDIT_BUREAU_WEEK', 'AMT_REQ_CREDIT_BUREAU_YEAR',
+            'CNT_CHILDREN', 'CNT_FAM_MEMBERS', 'CODE_GENDER', 'DAYS_BIRTH', 'DAYS_EMPLOYED',
+            'DAYS_ID_PUBLISH', 'DAYS_LAST_PHONE_CHANGE', 'DAYS_REGISTRATION',
+            'DEF_30_CNT_SOCIAL_CIRCLE', 'DEF_60_CNT_SOCIAL_CIRCLE', 'EXT_SOURCE_2', 'EXT_SOURCE_3',
+            'FLAG_CONT_MOBILE', 'FLAG_DOCUMENT_10', 'FLAG_DOCUMENT_11', 'FLAG_DOCUMENT_12',
+            'FLAG_DOCUMENT_13', 'FLAG_DOCUMENT_14', 'FLAG_DOCUMENT_15', 'FLAG_DOCUMENT_16',
+            'FLAG_DOCUMENT_17', 'FLAG_DOCUMENT_18', 'FLAG_DOCUMENT_19', 'FLAG_DOCUMENT_2',
+            'FLAG_DOCUMENT_20', 'FLAG_DOCUMENT_21', 'FLAG_DOCUMENT_3', 'FLAG_DOCUMENT_4',
+            'FLAG_DOCUMENT_5', 'FLAG_DOCUMENT_6', 'FLAG_DOCUMENT_7', 'FLAG_DOCUMENT_8',
+            'FLAG_DOCUMENT_9', 'FLAG_EMAIL', 'FLAG_EMP_PHONE', 'FLAG_MOBIL', 'FLAG_OWN_CAR',
+            'FLAG_OWN_REALTY', 'FLAG_PHONE', 'FLAG_WORK_PHONE', 'HOUR_APPR_PROCESS_START',
+            'LIVE_CITY_NOT_WORK_CITY', 'LIVE_REGION_NOT_WORK_REGION', 'NAME_CONTRACT_TYPE',
+            'NAME_EDUCATION_TYPE', 'NAME_FAMILY_STATUS', 'NAME_HOUSING_TYPE', 'NAME_INCOME_TYPE',
+            'NAME_TYPE_SUITE', 'OBS_30_CNT_SOCIAL_CIRCLE', 'OBS_60_CNT_SOCIAL_CIRCLE',
             'OCCUPATION_TYPE', 'ORGANIZATION_TYPE', 'REGION_POPULATION_RELATIVE',
-            'REGION_RATING_CLIENT', 'REGION_RATING_CLIENT_W_CITY',
-            'REG_CITY_NOT_LIVE_CITY', 'REG_CITY_NOT_WORK_CITY',
-            'REG_REGION_NOT_LIVE_REGION', 'REG_REGION_NOT_WORK_REGION',
+            'REGION_RATING_CLIENT', 'REGION_RATING_CLIENT_W_CITY', 'REG_CITY_NOT_LIVE_CITY',
+            'REG_CITY_NOT_WORK_CITY', 'REG_REGION_NOT_LIVE_REGION', 'REG_REGION_NOT_WORK_REGION',
             'SK_ID_CURR', 'WEEKDAY_APPR_PROCESS_START'
         ]
+        df_app = df_app[app_colonnes_a_conserver]
+        df_app, _ = imputer_valeurs_manquantes(df_app)
 
-        app_test = app_test[colonnes_a_conserver]
+        for col in ['CNT_FAM_MEMBERS', 'OBS_30_CNT_SOCIAL_CIRCLE', 'DEF_30_CNT_SOCIAL_CIRCLE',
+                    'OBS_60_CNT_SOCIAL_CIRCLE', 'DEF_60_CNT_SOCIAL_CIRCLE',
+                    'AMT_REQ_CREDIT_BUREAU_HOUR', 'AMT_REQ_CREDIT_BUREAU_DAY',
+                    'AMT_REQ_CREDIT_BUREAU_WEEK', 'AMT_REQ_CREDIT_BUREAU_MON',
+                    'AMT_REQ_CREDIT_BUREAU_QRT', 'AMT_REQ_CREDIT_BUREAU_YEAR']:
+            df_app[col] = df_app[col].astype(int)
 
-        # Prétraitement app_test
-        app_test, _ = imputer_valeurs_manquantes(app_test)
-        app_test, _ = convertir_binaires_en_object(app_test)
-        app_test = nettoyer_colonnes_categorielles_application(app_test)
-        app_test, _ = reduire_types(app_test)
+        df_app, _ = convertir_binaires_en_object(df_app)
+        df_app = nettoyer_colonnes_categorielles_application(df_app)
+        df_app, _ = reduire_types(df_app)
 
-        bureau_df, _ = nettoyer_colonnes_categorielles_bureau(bureau_df)
-        bureau_df, _ = reduire_types(bureau_df)
-        previous_df, _ = nettoyer_colonnes_categorielles_previous(previous_df)
-        previous_df, _ = reduire_types(previous_df)
+        # === Étape 2 : Prétraitement bureau ===
+        bureau_colonnes_a_conserver = [
+            'AMT_CREDIT_SUM', 'AMT_CREDIT_SUM_DEBT', 'AMT_CREDIT_SUM_LIMIT',
+            'AMT_CREDIT_SUM_OVERDUE', 'CNT_CREDIT_PROLONG', 'CREDIT_ACTIVE',
+            'CREDIT_CURRENCY', 'CREDIT_DAY_OVERDUE', 'CREDIT_TYPE', 'DAYS_CREDIT',
+            'DAYS_CREDIT_ENDDATE', 'DAYS_CREDIT_UPDATE', 'DAYS_ENDDATE_FACT',
+            'SK_ID_BUREAU', 'SK_ID_CURR'
+        ]
+        df_bureau = df_bureau[bureau_colonnes_a_conserver]
+        df_bureau, _ = imputer_valeurs_manquantes(df_bureau)
+        df_bureau[['DAYS_CREDIT_ENDDATE', 'DAYS_ENDDATE_FACT']] = df_bureau[
+            ['DAYS_CREDIT_ENDDATE', 'DAYS_ENDDATE_FACT']
+        ].astype('int32')
+        df_bureau = nettoyer_colonnes_categorielles_bureau(df_bureau)
+        df_bureau, _ = reduire_types(df_bureau)
 
-        df = fusionner_et_agreger_donnees(app_test, bureau_df, previous_df)
+        # === Étape 3 : Prétraitement previous_application ===
+        prev_colonnes_a_conserver = [
+            'AMT_ANNUITY','AMT_APPLICATION','AMT_CREDIT','AMT_GOODS_PRICE',
+            'CHANNEL_TYPE','CNT_PAYMENT','CODE_REJECT_REASON','DAYS_DECISION',
+            'DAYS_FIRST_DRAWING','DAYS_FIRST_DUE','DAYS_LAST_DUE','DAYS_LAST_DUE_1ST_VERSION',
+            'DAYS_TERMINATION','FLAG_LAST_APPL_PER_CONTRACT','HOUR_APPR_PROCESS_START',
+            'NAME_CASH_LOAN_PURPOSE','NAME_CLIENT_TYPE','NAME_CONTRACT_STATUS',
+            'NAME_CONTRACT_TYPE','NAME_GOODS_CATEGORY','NAME_PAYMENT_TYPE',
+            'NAME_PORTFOLIO','NAME_PRODUCT_TYPE','NAME_SELLER_INDUSTRY',
+            'NAME_YIELD_GROUP','NFLAG_INSURED_ON_APPROVAL','NFLAG_LAST_APPL_IN_DAY',
+            'PRODUCT_COMBINATION','SELLERPLACE_AREA','SK_ID_CURR','SK_ID_PREV',
+            'WEEKDAY_APPR_PROCESS_START'
+        ]
+        df_prev = df_prev[prev_colonnes_a_conserver]
+        df_prev, _ = imputer_valeurs_manquantes(df_prev)
+
+        for col in ['CNT_PAYMENT', 'DAYS_DECISION', 'SELLERPLACE_AREA',
+                    'NFLAG_LAST_APPL_IN_DAY', 'NFLAG_MICRO_CASH', 'NFLAG_INSURED_ON_APPROVAL']:
+            if col in df_prev.columns:
+                df_prev[col] = df_prev[col].fillna(0).astype(int)
+
+        df_prev, _ = convertir_binaires_en_object(df_prev)
+        df_prev = nettoyer_colonnes_categorielles_previous(df_prev)
+        df_prev, _ = reduire_types(df_prev)
+
+        # === Étape 4 : Fusion & Feature engineering ===
+        df = fusionner_et_agreger_donnees(df_app, df_bureau, df_prev)
         df.fillna(0, inplace=True)
+
+        # Nettoyage colonnes
         df.columns = df.columns.str.strip().str.replace('[^A-Za-z0-9_]+', '_', regex=True)
 
+        # Encodage
         cat_cols = df.select_dtypes(include='object').columns
         df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
 
-        ids_clients = df['SK_ID_CURR']
-        X_app = df.drop(columns=['SK_ID_CURR'])
-        X_app = X_app.reindex(columns=colonnes_utiles, fill_value=0)
+        # Chargement du modèle
+        with open("models/best_model_lightgbm.pkl", "rb") as f:
+            model = pickle.load(f)
 
-        for col, dtype in dtypes_dict.items():
-            if col in X_app.columns:
-                try:
-                    X_app[col] = X_app[col].astype(dtype)
-                except Exception as e:
-                    print(f"Erreur sur {col} : {e}")
+        colonnes_utiles = joblib.load("models/columns_used.pkl")
+        colonnes_types = joblib.load("models/columns_dtypes.pkl")
 
-        probas = model.predict_proba(X_app)[:, 1]
-        preds = (probas >= seuil_optimal).astype(int)
+        # Features et IDs
+        ids_clients = df["SK_ID_CURR"]
+        X = df.drop(columns=["SK_ID_CURR"]).reindex(columns=colonnes_utiles, fill_value=0)
+        for col, dtype in colonnes_types.items():
+            if col in X.columns:
+                X[col] = X[col].astype(dtype)
 
-        df_results = pd.DataFrame({
+        # Prédiction
+        probas = model.predict_proba(X)[:, 1]
+        seuil = 0.14
+        y_pred = (probas >= seuil).astype(int)
+
+        resultats = pd.DataFrame({
             "SK_ID_CURR": ids_clients,
             "Score_proba": probas,
-            "Decision": preds
+            "Decision": y_pred
         })
 
-        if sk_id is not None:
-            if sk_id not in ids_clients.values:
-                raise HTTPException(status_code=404, detail="SK_ID_CURR non trouvé")
-            index = ids_clients[ids_clients == sk_id].index[0]
-            explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(X_app)
-            valeurs = shap_values[1][index]
-            features = X_app.iloc[index]
-            shap_data = dict(sorted(zip(features.index, valeurs), key=lambda x: abs(x[1]), reverse=True)[:10])
-            return JSONResponse({
-                "prediction": int(preds[index]),
-                "proba": float(probas[index]),
-                "shap_top_10": shap_data
-            })
+        # SHAP
+        explainer = shap.TreeExplainer(model)
+        shap_vals = explainer.shap_values(X)
 
-        return df_results.to_dict(orient="records")
+        # SHAP global
+        shap_global = np.abs(shap_vals[1]).mean(axis=0)
+        shap_global_df = pd.DataFrame({
+            "Feature": X.columns,
+            "Importance": shap_global
+        }).sort_values(by="Importance", ascending=False).head(20)
+
+        # SHAP local
+        if sk_id_curr not in ids_clients.values:
+            raise HTTPException(status_code=404, detail=f"SK_ID_CURR {sk_id_curr} introuvable.")
+
+        idx = ids_clients[ids_clients == sk_id_curr].index[0]
+        shap_local = shap_vals[1][idx].tolist()
+
+        return JSONResponse(content={
+            "predictions": resultats.to_dict(orient="records"),
+            "shap_global": shap_global_df.to_dict(orient="records"),
+            "shap_local": shap_local,
+            "features": X.columns.tolist(),
+            "ids_clients": ids_clients.tolist()
+        })
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        raise HTTPException(status_code=400, detail=str(e))
