@@ -5,8 +5,8 @@
 import os
 import pandas as pd
 import numpy as np
-import ipywidgets as widgets
-from IPython.display import display
+#import ipywidgets as widgets
+#from IPython.display import display
 import matplotlib.pyplot as plt
 
 # =============================================================================
