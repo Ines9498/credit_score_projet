@@ -33,7 +33,7 @@ if file_app and file_bureau and file_prev and sk_id_selected is not None:
         with st.spinner("🧹 Nettoyage des données en cours..."):
             try:
                 response = requests.post(
-                    "http://127.0.0.1:8000/upload",
+                    "https://api-credit-score.onrender.com",
                     data={"sk_id_curr": sk_id_selected},
                     files={
                         "application_test": ("application_test.csv", io.BytesIO(file_app.getvalue()), "text/csv"),
