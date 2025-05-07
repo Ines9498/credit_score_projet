@@ -6,6 +6,7 @@ import io
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Configuration de la page Streamlit
 st.set_page_config(layout="wide")
 st.title("📊 Prédiction de crédit & Explications SHAP")
 
@@ -15,17 +16,23 @@ de choisir un client (`SK_ID_CURR`), puis d'envoyer les données à une API pour
 et visualiser les explications SHAP.
 """)
 
-# Upload des fichiers
+# URL de l'API à contacter (assurez-vous que l'API est bien déployée)
+API_URL = "https://api-credit-score.onrender.com/upload"
+
+# Upload des fichiers CSV
 file_app = st.file_uploader("📄 Fichier application_test.csv", type="csv")
 file_bureau = st.file_uploader("📄 Fichier bureau.csv", type="csv")
 file_prev = st.file_uploader("📄 Fichier previous_application.csv", type="csv")
 
-# Sélection de SK_ID_CURR dès que le fichier application_test est chargé
+# Sélection de SK_ID_CURR si le fichier application_test est chargé
 sk_id_selected = None
 if file_app is not None:
-    df_app_preview = pd.read_csv(file_app, usecols=["SK_ID_CURR"])
-    sk_ids = df_app_preview["SK_ID_CURR"].unique().tolist()
-    sk_id_selected = st.selectbox("🔎 Choisissez un SK_ID_CURR pour explication locale :", sk_ids)
+    try:
+        df_app_preview = pd.read_csv(file_app, usecols=["SK_ID_CURR"])
+        sk_ids = df_app_preview["SK_ID_CURR"].unique().tolist()
+        sk_id_selected = st.selectbox("🔎 Choisissez un SK_ID_CURR pour explication locale :", sk_ids)
+    except Exception as e:
+        st.error(f"❌ Erreur de lecture du fichier application_test.csv : {e}")
 
 # Bouton pour envoyer à l'API
 if file_app and file_bureau and file_prev and sk_id_selected is not None:
@@ -33,12 +40,18 @@ if file_app and file_bureau and file_prev and sk_id_selected is not None:
         with st.spinner("🧹 Nettoyage des données en cours..."):
             try:
                 response = requests.post(
-                    "https://api-credit-score.onrender.com",
+                    API_URL,
                     data={"sk_id_curr": sk_id_selected},
                     files={
-                        "application_test": ("application_test.csv", io.BytesIO(file_app.getvalue()), "text/csv"),
-                        "bureau": ("bureau.csv", io.BytesIO(file_bureau.getvalue()), "text/csv"),
-                        "previous_application": ("previous_application.csv", io.BytesIO(file_prev.getvalue()), "text/csv")
+                        "application_test": (
+                            "application_test.csv", io.BytesIO(file_app.getvalue()), "text/csv"
+                        ),
+                        "bureau": (
+                            "bureau.csv", io.BytesIO(file_bureau.getvalue()), "text/csv"
+                        ),
+                        "previous_application": (
+                            "previous_application.csv", io.BytesIO(file_prev.getvalue()), "text/csv"
+                        )
                     }
                 )
             except Exception as e:
