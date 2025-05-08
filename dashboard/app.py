@@ -97,7 +97,7 @@ if file_app and file_bureau and file_prev and sk_id_selected is not None:
                     st.error(f"❌ Erreur lors du traitement de la réponse : {e}")
             else:
                 st.error(f"❌ Erreur API ({response.status_code}) : {response.text}")
-        else:
-                st.error(f"❌ Erreur Bouton ({response.status_code}) : {response.text}")
+    else:
+        st.error(f"❌ Erreur Bouton ({response.status_code}) : {response.text}")
 else:
     st.info("⏳ Veuillez uploader les 3 fichiers et sélectionner un SK_ID_CURR pour activer le bouton.")
