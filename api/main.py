@@ -1,4 +1,4 @@
-# === FICHIER API (FastAPI) ===
+# === FICHIER API (FastAPI) COMPLET ===
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -52,7 +52,7 @@ async def upload_files(
         df_bureau = pd.read_csv(io.BytesIO(await bureau.read()))
         df_prev = pd.read_csv(io.BytesIO(await previous_application.read()))
 
-        # === Étape 1 : Prétraitement application_test ===
+        # === Prétraitement application_test ===
         app_colonnes_a_conserver = [
             'AMT_ANNUITY', 'AMT_CREDIT', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL',
             'AMT_REQ_CREDIT_BUREAU_DAY', 'AMT_REQ_CREDIT_BUREAU_HOUR', 'AMT_REQ_CREDIT_BUREAU_MON',
@@ -89,7 +89,7 @@ async def upload_files(
         df_app = nettoyer_colonnes_categorielles_application(df_app)
         df_app, _ = reduire_types(df_app)
 
-        # === Étape 2 : Prétraitement bureau ===
+        # === Prétraitement bureau ===
         bureau_colonnes_a_conserver = [
             'AMT_CREDIT_SUM', 'AMT_CREDIT_SUM_DEBT', 'AMT_CREDIT_SUM_LIMIT',
             'AMT_CREDIT_SUM_OVERDUE', 'CNT_CREDIT_PROLONG', 'CREDIT_ACTIVE',
@@ -105,7 +105,7 @@ async def upload_files(
         df_bureau = nettoyer_colonnes_categorielles_bureau(df_bureau)
         df_bureau, _ = reduire_types(df_bureau)
 
-        # === Étape 3 : Prétraitement previous_application ===
+        # === Prétraitement previous_application ===
         prev_colonnes_a_conserver = [
             'AMT_ANNUITY','AMT_APPLICATION','AMT_CREDIT','AMT_GOODS_PRICE',
             'CHANNEL_TYPE','CNT_PAYMENT','CODE_REJECT_REASON','DAYS_DECISION',
@@ -130,7 +130,7 @@ async def upload_files(
         df_prev = nettoyer_colonnes_categorielles_previous(df_prev)
         df_prev, _ = reduire_types(df_prev)
 
-        # === Fusion et modélisation inchangés ===
+        # === Fusion & Feature engineering ===
         df = fusionner_et_agreger_donnees(df_app, df_bureau, df_prev)
         df.fillna(0, inplace=True)
         df.columns = df.columns.str.strip().str.replace('[^A-Za-z0-9_]+', '_', regex=True)
@@ -155,23 +155,31 @@ async def upload_files(
         shap_vals = explainer.shap_values(X)
         idx = ids_clients[ids_clients == sk_id_curr].index[0]
 
-        # Summary plot
-        fig_summary, ax = plt.subplots(figsize=(10, 6))
-        shap.summary_plot(shap_vals[1], X, show=False)
-        buf_summary = io.BytesIO()
-        plt.savefig(buf_summary, format="png", bbox_inches="tight")
-        plt.close(fig_summary)
-        summary_plot_b64 = base64.b64encode(buf_summary.getvalue()).decode("utf-8")
+        shap_values_summary = shap_vals[1] if isinstance(shap_vals, list) else shap_vals
 
-        # Force plot local
-        fig_force = plt.figure()
-        shap.force_plot(
-            explainer.expected_value[1], shap_vals[1][idx], X.iloc[idx], matplotlib=True, show=False
-        )
-        buf_force = io.BytesIO()
-        plt.savefig(buf_force, format="png", bbox_inches="tight")
-        plt.close(fig_force)
-        force_plot_b64 = base64.b64encode(buf_force.getvalue()).decode("utf-8")
+        try:
+            fig_summary, ax = plt.subplots(figsize=(10, 6))
+            shap.summary_plot(shap_values_summary, X, show=False)
+            buf_summary = io.BytesIO()
+            plt.savefig(buf_summary, format="png", bbox_inches="tight")
+            plt.close(fig_summary)
+            summary_plot_b64 = base64.b64encode(buf_summary.getvalue()).decode("utf-8")
+        except Exception:
+            summary_plot_b64 = None
+
+        try:
+            shap_values_force = shap_vals[1][idx] if isinstance(shap_vals, list) else shap_vals[idx]
+            expected_value_force = explainer.expected_value[1] if isinstance(explainer.expected_value, list) else explainer.expected_value
+            fig_force = plt.figure()
+            shap.force_plot(
+                expected_value_force, shap_values_force, X.iloc[idx], matplotlib=True, show=False
+            )
+            buf_force = io.BytesIO()
+            plt.savefig(buf_force, format="png", bbox_inches="tight")
+            plt.close(fig_force)
+            force_plot_b64 = base64.b64encode(buf_force.getvalue()).decode("utf-8")
+        except Exception:
+            force_plot_b64 = None
 
         return JSONResponse(content={
             "predictions": resultats.to_dict(orient="records"),
