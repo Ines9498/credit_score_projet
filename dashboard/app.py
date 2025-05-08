@@ -17,7 +17,7 @@ et visualiser les explications SHAP.
 """)
 
 # URL de l'API à contacter (assurez-vous que l'API est bien déployée)
-API_URL = "https://api-credit-score.onrender.com/upload"
+API_URL = "http://0.0.0.0:10000/upload"
 
 # Upload des fichiers CSV
 file_app = st.file_uploader("📄 Fichier application_test.csv", type="csv")
