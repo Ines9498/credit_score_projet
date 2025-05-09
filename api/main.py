@@ -187,8 +187,11 @@ async def upload_files(
             "shap_force_plot": force_plot_b64
         })
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.get("/")
 def home():
