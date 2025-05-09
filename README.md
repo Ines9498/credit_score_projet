@@ -27,29 +27,28 @@ Il comprend une **API FastAPI** déployée sur Render et un **dashboard Streamli
 ## 📁 Structure du projet
 
 credit_score_projet7/
-│
-├── api/ # Application FastAPI (main.py)
-├── dashboard/ # Application Streamlit (app.py)
-├── data/ # Données (non suivies par Git)
-│ ├── original/ # Jeux de données bruts
-│ └── modified/ # Versions transformées
-├── models/ # Modèle entraîné + fichiers auxiliaires
-│ ├── best_model_lightgbm.pkl
-│ ├── columns_used.pkl
-│ └── columns_dtypes.pkl
-├── notebook/ # Notebook principal
-│ └── notebook_credit_score.ipynb
-├── monitoring/ # Rapport de data drift Evidently
-│ ├── drift_report.html
-│ └── venv_drift/ # Environnement spécifique (ignoré)
-├── src/ # Prétraitements et feature engineering
-│ ├── preprocessing.py
-│ └── feature_engineering.py
-├── tests/ # Tests automatisés (pytest)
-│ └── test_api.py
-├── .gitignore
-├── requirements.txt
-└── README.md
+- api/ # Application FastAPI (main.py)
+- dashboard/ # Application Streamlit (app.py)
+- data/ # Données (non suivies par Git)
+  - original/ # Jeux de données bruts
+  - modified/ # Versions transformées
+- models/ # Modèle entraîné + fichiers auxiliaires
+  - best_model_lightgbm.pkl
+  - columns_used.pkl
+  - columns_dtypes.pkl
+- notebook/ # Notebook principal
+  - notebook.ipynb
+- monitoring/ # Rapport de data drift Evidently
+ - drift_report.html
+  
+- src/ # Prétraitements et feature engineering
+ - preprocessing.py
+ - feature_engineering.py
+- tests/ # Tests automatisés (pytest)
+  - test_api.py
+- .gitignore
+- requirements.txt
+- README.md
 
 ---
 
