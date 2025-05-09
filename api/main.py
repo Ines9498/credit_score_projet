@@ -1,13 +1,16 @@
+# === FICHIER API (FastAPI) COMPLET ===
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import pandas as pd
 import numpy as np
-from io import BytesIO
+import matplotlib.pyplot as plt
+import shap
+import base64
+import os
+import io
 import joblib
 import pickle
-import shap
-import os
 
 from src.preprocessing import (
     imputer_valeurs_manquantes,
@@ -29,6 +32,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Chargement initial des modèles
+base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
+with open(os.path.join(base_dir, "best_model_lightgbm.pkl"), "rb") as f:
+    model = pickle.load(f)
+colonnes_utiles = joblib.load(os.path.join(base_dir, "columns_used.pkl"))
+colonnes_types = joblib.load(os.path.join(base_dir, "columns_dtypes.pkl"))
+explainer = shap.TreeExplainer(model)
+
 @app.post("/upload")
 async def upload_files(
     application_test: UploadFile = File(...),
@@ -37,11 +48,11 @@ async def upload_files(
     sk_id_curr: int = Form(...)
 ):
     try:
-        df_app = pd.read_csv(BytesIO(await application_test.read()))
-        df_bureau = pd.read_csv(BytesIO(await bureau.read()))
-        df_prev = pd.read_csv(BytesIO(await previous_application.read()))
+        df_app = pd.read_csv(io.BytesIO(await application_test.read()))
+        df_bureau = pd.read_csv(io.BytesIO(await bureau.read()))
+        df_prev = pd.read_csv(io.BytesIO(await previous_application.read()))
 
-        # === Étape 1 : Prétraitement application_test ===
+        # === Prétraitement application_test ===
         app_colonnes_a_conserver = [
             'AMT_ANNUITY', 'AMT_CREDIT', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL',
             'AMT_REQ_CREDIT_BUREAU_DAY', 'AMT_REQ_CREDIT_BUREAU_HOUR', 'AMT_REQ_CREDIT_BUREAU_MON',
@@ -78,7 +89,7 @@ async def upload_files(
         df_app = nettoyer_colonnes_categorielles_application(df_app)
         df_app, _ = reduire_types(df_app)
 
-        # === Étape 2 : Prétraitement bureau ===
+        # === Prétraitement bureau ===
         bureau_colonnes_a_conserver = [
             'AMT_CREDIT_SUM', 'AMT_CREDIT_SUM_DEBT', 'AMT_CREDIT_SUM_LIMIT',
             'AMT_CREDIT_SUM_OVERDUE', 'CNT_CREDIT_PROLONG', 'CREDIT_ACTIVE',
@@ -94,7 +105,7 @@ async def upload_files(
         df_bureau = nettoyer_colonnes_categorielles_bureau(df_bureau)
         df_bureau, _ = reduire_types(df_bureau)
 
-        # === Étape 3 : Prétraitement previous_application ===
+        # === Prétraitement previous_application ===
         prev_colonnes_a_conserver = [
             'AMT_ANNUITY','AMT_APPLICATION','AMT_CREDIT','AMT_GOODS_PRICE',
             'CHANNEL_TYPE','CNT_PAYMENT','CODE_REJECT_REASON','DAYS_DECISION',
@@ -119,24 +130,12 @@ async def upload_files(
         df_prev = nettoyer_colonnes_categorielles_previous(df_prev)
         df_prev, _ = reduire_types(df_prev)
 
-        # === Étape 4 : Fusion & Feature engineering ===
+        # === Fusion & Feature engineering ===
         df = fusionner_et_agreger_donnees(df_app, df_bureau, df_prev)
         df.fillna(0, inplace=True)
-
         df.columns = df.columns.str.strip().str.replace('[^A-Za-z0-9_]+', '_', regex=True)
-        cat_cols = df.select_dtypes(include='object').columns
-        df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
+        df = pd.get_dummies(df, columns=df.select_dtypes(include='object').columns, drop_first=True)
 
-        # === Chargement des modèles ===
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
-
-        with open(os.path.join(base_dir, "best_model_lightgbm.pkl"), "rb") as f:
-            model = pickle.load(f)
-
-        colonnes_utiles = joblib.load(os.path.join(base_dir, "columns_used.pkl"))
-        colonnes_types = joblib.load(os.path.join(base_dir, "columns_dtypes.pkl"))
-
-        # Prédiction
         ids_clients = df["SK_ID_CURR"]
         X = df.drop(columns=["SK_ID_CURR"]).reindex(columns=colonnes_utiles, fill_value=0)
         for col, dtype in colonnes_types.items():
@@ -153,32 +152,47 @@ async def upload_files(
             "Decision": y_pred
         })
 
-        explainer = shap.TreeExplainer(model)
         shap_vals = explainer.shap_values(X)
-
-        shap_global = np.abs(shap_vals[1]).mean(axis=0)
-        shap_global_df = pd.DataFrame({
-            "Feature": X.columns,
-            "Importance": shap_global
-        }).sort_values(by="Importance", ascending=False).head(20)
-
-        if sk_id_curr not in ids_clients.values:
-            raise HTTPException(status_code=404, detail=f"SK_ID_CURR {sk_id_curr} introuvable.")
-
         idx = ids_clients[ids_clients == sk_id_curr].index[0]
-        shap_local = shap_vals[1][idx].tolist()
+
+        shap_values_summary = shap_vals[1] if isinstance(shap_vals, list) else shap_vals
+
+        try:
+            fig_summary, ax = plt.subplots(figsize=(10, 6))
+            shap.summary_plot(shap_values_summary, X, show=False)
+            buf_summary = io.BytesIO()
+            plt.savefig(buf_summary, format="png", bbox_inches="tight")
+            plt.close(fig_summary)
+            summary_plot_b64 = base64.b64encode(buf_summary.getvalue()).decode("utf-8")
+        except Exception:
+            summary_plot_b64 = None
+
+        try:
+            shap_values_force = shap_vals[1][idx] if isinstance(shap_vals, list) else shap_vals[idx]
+            expected_value_force = explainer.expected_value[1] if isinstance(explainer.expected_value, list) else explainer.expected_value
+            fig_force = plt.figure()
+            shap.force_plot(
+                expected_value_force, shap_values_force, X.iloc[idx], matplotlib=True, show=False
+            )
+            buf_force = io.BytesIO()
+            plt.savefig(buf_force, format="png", bbox_inches="tight")
+            plt.close(fig_force)
+            force_plot_b64 = base64.b64encode(buf_force.getvalue()).decode("utf-8")
+        except Exception:
+            force_plot_b64 = None
 
         return JSONResponse(content={
             "predictions": resultats.to_dict(orient="records"),
-            "shap_global": shap_global_df.to_dict(orient="records"),
-            "shap_local": shap_local,
-            "features": X.columns.tolist(),
-            "ids_clients": ids_clients.tolist()
+            "shap_summary_plot": summary_plot_b64,
+            "shap_force_plot": force_plot_b64
         })
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-        
+
+
 @app.get("/")
 def home():
     return {"message": "API de scoring crédit opérationnelle 🚀 - accédez à /docs pour voir les endpoints."}

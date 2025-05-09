@@ -1,129 +1,124 @@
 # 🧠 Projet de Scoring Crédit - "Prêt à dépenser"
 
 Ce projet a pour objectif de prédire si un client est un bon ou un mauvais payeur à partir de ses données personnelles, professionnelles et de crédit, en s'appuyant sur les données publiques de Home Credit.  
-Il comprend une **API FastAPI** et un **dashboard Streamlit** permettant de charger les fichiers, faire une prédiction, visualiser des explications SHAP et explorer des indicateurs clés.
+Il comprend une **API FastAPI** déployée sur Render et un **dashboard Streamlit** permettant de charger les fichiers, faire une prédiction, visualiser des explications SHAP et explorer des indicateurs clés.
 
 ---
 
 ## 🚀 Fonctionnalités principales
 
-- 🔍 Traitement des données (`preprocessing.py`, `feature_engineering.py`)
-- 📊 Entraînement d’un modèle LightGBM optimisé avec SMOTE
-- 🧪 Calcul d’un **score métier** prenant en compte les faux positifs et faux négatifs
-- 🧠 Explicabilité via SHAP (globale et locale)
-- 🌐 **API FastAPI** pour exposer le modèle
-- 🖥️ **Dashboard Streamlit** pour permettre aux chargés de clientèle de :
-  - Uploader les fichiers
-  - Sélectionner un client
-  - Obtenir une prédiction ("accorder" ou "refuser")
-  - Visualiser les explications SHAP
-  - Consulter des indicateurs (âge, type de travail...)
+- 🔍 Traitement et agrégation des données (`preprocessing.py`, `feature_engineering.py`)
+- 📊 Entraînement d’un modèle **LightGBM** optimisé avec **SMOTE**
+- 🧪 Calcul d’un **score métier** pondérant les erreurs critiques
+- 🧠 Explicabilité via **SHAP** (globale + locale)
+- 🌐 **API FastAPI** pour l'exposition du modèle (✅ déployée sur Render)
+- 🖥️ **Dashboard Streamlit** pour :
+  - Uploader les fichiers de scoring
+  - Sélectionner un client (`SK_ID_CURR`)
+  - Obtenir une prédiction "accorder / refuser"
+  - Visualiser les valeurs SHAP
+  - Comparer les indicateurs clés
+
+- 🧪 **Tests unitaires** pour l’API (`tests/test_api.py`)
+- 📉 **Monitoring** de la dérive des données avec **Evidently**
 
 ---
 
 ## 📁 Structure du projet
 
-credit_score_projet/
+credit_score_projet7/
 │
 ├── api/ # Application FastAPI (main.py)
-│
 ├── dashboard/ # Application Streamlit (app.py)
-│
-├── data/
-│ ├── original/ # Jeux de données initiaux (non suivis par Git)
-│ └── modified/ # Fichiers transformés (ex: df_final.csv)
-│
-├── models/ # Modèle entraîné et fichiers auxiliaires
+├── data/ # Données (non suivies par Git)
+│ ├── original/ # Jeux de données bruts
+│ └── modified/ # Versions transformées
+├── models/ # Modèle entraîné + fichiers auxiliaires
 │ ├── best_model_lightgbm.pkl
 │ ├── columns_used.pkl
 │ └── columns_dtypes.pkl
-│
-├── notebook/ # Notebook d'entraînement et d'analyse
+├── notebook/ # Notebook principal
 │ └── notebook_credit_score.ipynb
-│
-├── src/ # Fonctions de preprocessing et feature engineering
+├── monitoring/ # Rapport de data drift Evidently
+│ ├── drift_report.html
+│ └── venv_drift/ # Environnement spécifique (ignoré)
+├── src/ # Prétraitements et feature engineering
 │ ├── preprocessing.py
 │ └── feature_engineering.py
-│
-├── tests/ # Tests unitaires (à compléter)
-│
-├── .gitignore # Fichiers et dossiers exclus de Git
-├── requirements.txt # Dépendances du projet
-└── README.md # Ce fichier
-
+├── tests/ # Tests automatisés (pytest)
+│ └── test_api.py
+├── .gitignore
+├── requirements.txt
+└── README.md
 
 ---
 
 ## ⚙️ Lancer le projet localement
 
-### 1. Créer un environnement virtuel
-
-git clone https://github.com/<ton-utilisateur>/CREDIT_SCORE_PROJET7.git
-
-cd CREDIT_SCORE_PROJET7
-
-### 2. Créer et activer l’environnement virtuel
+git clone https://github.com/<ton-utilisateur>/credit_score_projet7.git
+cd credit_score_projet7
 
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
-
-### 3. Installer les dépendances
+source venv/bin/activate        # (ou venv\Scripts\activate sous Windows)
 
 pip install -r requirements.txt
 
----
-
-## 🧬 API FastAPI
-### Lancer l’API :
+🧬 API FastAPI
+Lancer l’API localement 
 
 cd api
 uvicorn main:app --reload
 
-### Accès :
+Accès local :
 
-Interface interactive : http://localhost:8000/docs
+  -  Interface interactive : http://localhost:8000/docs
 
+Accès en ligne :
 
----
+    ✅ API déployée sur Render
 
-## 📊 Dashboard Streamlit
-### Lancer le dashboard :
+📊 Dashboard Streamlit
+Lancer localement :
 
 cd dashboard
 streamlit run app.py
 
-
 Le dashboard permet :
 
-- d’uploader les fichiers application_test.csv, bureau.csv et previous_application.csv
+  - de charger les fichiers application_test.csv, bureau.csv, previous_application.csv
 
-- de visualiser les prédictions du modèle
+  - de sélectionner un SK_ID_CURR
 
-- de voir les explications SHAP
+  - d'obtenir la prédiction et les explications SHAP
 
----
+🧪 Tests & Monitoring
+✅ Lancer les tests unitaires :
 
-## ☁️ Déploiement
+pytest tests/test_api.py
 
-Ce projet peut être déployé sur :
+📈 Rapport de dérive des données :
 
-- Render (API)
+Un rapport Evidently a été généré pour comparer application_train.csv (référence) et application_test.csv (production) :
 
-- Streamlit Community Cloud (dashboard)
+    📄 monitoring/drift_report.html
 
+☁️ Déploiement
 
----
+  - API FastAPI : https://api-credit-score.onrender.com
 
-## ✅ À venir
+  - Dashboard Streamlit : déploiement possible sur Streamlit Cloud
 
-- 🔬 Ajout de tests unitaires dans le dossier tests/
+✅ Améliorations prévues
 
-- ⚠️ Ajout d’un gestionnaire d’erreur pour les colonnes manquantes
+- Ajouter des tests pour les erreurs
 
-- 📈 Monitoring en production avec MLflow et Evidently
+- Mettre en place l’analyse de dérive des données
 
-## 🧠 Auteure
+- Ajouter l’authentification sur l’API
+
+- Affiner le seuil de décision métier dynamiquement
+
+🧠 Auteure
 
 Inès Nuckchady
-Projet réalisé dans le cadre d’une formation en Data Science
+Projet réalisé dans le cadre d’une formation en Data Science.

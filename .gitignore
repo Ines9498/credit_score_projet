@@ -1,15 +1,22 @@
-# Ignorer les datasets
+# Dossiers de données et logs
 data/
 mlruns/
-
-# Ignorer l'environnement virtuel
+monitoring/venv_drift/
 venv/
 
-# Ignorer les fichiers temporaires
-*.pyc
+# Environnements virtuels éventuels
+.venv/
+env/
+ENV/
+
+# Fichiers temporaires Python
 __pycache__/
+*.py[cod]
+*.so
+
+# Fichiers Jupyter et macOS
 .ipynb_checkpoints/
 .DS_Store
 
-# Résultats de prédiction
+# Résultats temporaires
 resultats_application_test.csv
