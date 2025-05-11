@@ -49,7 +49,7 @@ if file_app and file_bureau and file_prev and sk_id_selected is not None:
 
             # Infos contextuelles du client
             if "infos_contextuelles" in data:
-                st.subheader("🧍‍♂️ Informations du client")
+                st.subheader("🧍 Informations du client")
                 client_info = data["infos_contextuelles"]
                 st.markdown(f"""
                 - **Âge** : {client_info['Age_annees']} ans  
@@ -85,7 +85,6 @@ if file_app and file_bureau and file_prev and sk_id_selected is not None:
                 st.image(force_img, caption=f"Force Plot pour SK_ID_CURR {sk_id_selected}")
             else:
                 st.warning("⚠️ Le graphique SHAP local n'a pas pu être généré.")
-
         else:
             st.error(f"❌ Erreur API ({response.status_code}) : {response.text}")
 else:
