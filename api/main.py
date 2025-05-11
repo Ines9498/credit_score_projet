@@ -1,4 +1,3 @@
-# === FICHIER API (FastAPI) COMPLET ===
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -154,7 +153,6 @@ async def upload_files(
 
         shap_vals = explainer.shap_values(X)
         idx = ids_clients[ids_clients == sk_id_curr].index[0]
-
         shap_values_summary = shap_vals[1] if isinstance(shap_vals, list) else shap_vals
 
         try:
@@ -181,17 +179,33 @@ async def upload_files(
         except Exception:
             force_plot_b64 = None
 
+        # === Infos contextuelles ===
+        infos_client = df_app[df_app['SK_ID_CURR'] == sk_id_curr].iloc[0]
+        infos_contextuelles = {
+            "Age_annees": round(-infos_client["DAYS_BIRTH"] / 365, 1),
+            "AMT_INCOME_TOTAL": infos_client["AMT_INCOME_TOTAL"],
+            "AMT_CREDIT": infos_client["AMT_CREDIT"],
+            "NAME_FAMILY_STATUS": infos_client["NAME_FAMILY_STATUS"],
+            "NAME_HOUSING_TYPE": infos_client["NAME_HOUSING_TYPE"],
+            "OCCUPATION_TYPE": infos_client.get("OCCUPATION_TYPE", "Non renseigné")
+        }
+
+        moyennes_clients = {
+            "Age_annees": round(-df_app["DAYS_BIRTH"].mean() / 365, 1),
+            "AMT_INCOME_TOTAL": df_app["AMT_INCOME_TOTAL"].mean(),
+            "AMT_CREDIT": df_app["AMT_CREDIT"].mean()
+        }
+
         return JSONResponse(content={
             "predictions": resultats.to_dict(orient="records"),
             "shap_summary_plot": summary_plot_b64,
-            "shap_force_plot": force_plot_b64
+            "shap_force_plot": force_plot_b64,
+            "infos_contextuelles": infos_contextuelles,
+            "comparaison_moyenne": moyennes_clients
         })
 
-    except HTTPException as e:
-        raise e
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.get("/")
 def home():
